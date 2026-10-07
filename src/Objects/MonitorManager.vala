@@ -51,6 +51,7 @@ public class Display.MonitorManager : GLib.Object {
     private MutterDisplayConfigInterface iface;
     private uint current_serial;
     private MonitorLayoutManager layout_manager;
+    private GLib.HashTable<string, GLib.Variant> configuration_properties;
 
     private static MonitorManager monitor_manager;
     public static unowned MonitorManager get_default () {
@@ -127,6 +128,11 @@ public class Display.MonitorManager : GLib.Object {
             layout_mode = layout_mode_variant.get_uint32 ();
         }
         fractional_scale_enabled = layout_mode == 1;
+        configuration_properties = new GLib.HashTable<string, GLib.Variant> (str_hash, str_equal);
+        var supports_layout_mode = properties.lookup ("supports-changing-layout-mode");
+        if (supports_layout_mode != null && supports_layout_mode.get_boolean ()) {
+            configuration_properties.insert ("layout-mode", new Variant.uint32 (layout_mode));
+        }
 
         var max_screen_size_variant = properties.lookup ("max-screen-size");
         if (max_screen_size_variant != null) {
@@ -154,6 +160,8 @@ public class Display.MonitorManager : GLib.Object {
             monitor.vendor = mutter_monitor.monitor.vendor;
             monitor.product = mutter_monitor.monitor.product;
             monitor.serial = mutter_monitor.monitor.serial;
+            var is_for_lease = mutter_monitor.properties.lookup ("is-for-lease");
+            monitor.is_for_lease = is_for_lease != null && is_for_lease.get_boolean ();
             var display_name_variant = mutter_monitor.properties.lookup ("display-name");
             if (display_name_variant != null) {
                 monitor.display_name = display_name_variant.get_string ();
@@ -171,6 +179,19 @@ public class Display.MonitorManager : GLib.Object {
                 monitor.is_builtin = false;
             }
 
+            // ApplyMonitorsConfig defaults these properties when they are omitted.
+            var underscanning = mutter_monitor.properties.lookup ("is-underscanning");
+            if (underscanning != null) {
+                monitor.configuration_properties.insert ("underscanning", underscanning);
+            }
+
+            foreach (var name in new string[] {"color-mode", "rgb-range"}) {
+                var value = mutter_monitor.properties.lookup (name);
+                if (value != null) {
+                    monitor.configuration_properties.insert (name, value);
+                }
+            }
+
             foreach (var mutter_mode in mutter_monitor.modes) {
                 var mode = monitor.get_mode_by_id (mutter_mode.id);
                 if (mode == null) {
@@ -184,6 +205,10 @@ public class Display.MonitorManager : GLib.Object {
                 mode.frequency = mutter_mode.frequency;
                 mode.preferred_scale = mutter_mode.preferred_scale;
                 mode.supported_scales = mutter_mode.supported_scales;
+                var refresh_rate_mode = mutter_mode.properties.lookup ("refresh-rate-mode");
+                mode.is_variable = refresh_rate_mode != null && refresh_rate_mode.get_string () == "variable";
+                var is_interlaced = mutter_mode.properties.lookup ("is-interlaced");
+                mode.is_interlaced = is_interlaced != null && is_interlaced.get_boolean ();
                 var is_preferred_variant = mutter_mode.properties.lookup ("is-preferred");
                 if (is_preferred_variant != null) {
                     mode.is_preferred = is_preferred_variant.get_boolean ();
@@ -263,10 +288,26 @@ public class Display.MonitorManager : GLib.Object {
 
     public void set_monitor_config () throws Error {
         MutterWriteLogicalMonitor[] logical_monitors = {};
+        var monitors_for_lease = new VariantBuilder (new VariantType ("a(ssss)"));
         foreach (var virtual_monitor in virtual_monitors) {
             if (virtual_monitor.is_active) {
                 logical_monitors += get_mutter_logical_monitor (virtual_monitor);
+            } else {
+                foreach (var monitor in virtual_monitor.monitors) {
+                    if (monitor.is_for_lease) {
+                        monitors_for_lease.add ("(ssss)",
+                            monitor.connector, monitor.vendor, monitor.product, monitor.serial
+                        );
+                    }
+                }
             }
+        }
+
+        var leased_monitors = monitors_for_lease.end ();
+        if (leased_monitors.n_children () > 0) {
+            configuration_properties.insert ("monitors-for-lease", leased_monitors);
+        } else {
+            configuration_properties.remove ("monitors-for-lease");
         }
 
         int min_x = int.MAX;
@@ -287,8 +328,9 @@ public class Display.MonitorManager : GLib.Object {
             }
         }
 
-        var properties = new GLib.HashTable<string, GLib.Variant> (str_hash, str_equal);
-        iface.apply_monitors_config (current_serial, MutterApplyMethod.PERSISTENT, logical_monitors, properties);
+        iface.apply_monitors_config (
+            current_serial, MutterApplyMethod.PERSISTENT, logical_monitors, configuration_properties
+        );
     }
 
     public static MutterWriteLogicalMonitor get_mutter_logical_monitor (Display.VirtualMonitor virtual_monitor) {
@@ -302,11 +344,10 @@ public class Display.MonitorManager : GLib.Object {
 
         MutterWriteMonitor[] mutter_monitors = {};
         foreach (var monitor in virtual_monitor.monitors) {
-            var properties = new GLib.HashTable<string, GLib.Variant> (str_hash, str_equal);
             var mutter_monitor = MutterWriteMonitor () {
                 connector = monitor.connector,
                 monitor_mode = monitor.current_mode.id,
-                properties = properties
+                properties = monitor.configuration_properties
             };
 
             mutter_monitors += mutter_monitor;
@@ -387,6 +428,8 @@ public class Display.MonitorManager : GLib.Object {
             var single_virtual_monitor = new Display.VirtualMonitor ();
             var preferred_mode = monitor.preferred_mode;
             var current_mode = monitor.current_mode;
+            preferred_mode = monitor.get_adaptive_sync_mode (preferred_mode, current_mode.is_variable)
+                ?? preferred_mode;
 
             single_virtual_monitor.monitors.add (monitor);
 

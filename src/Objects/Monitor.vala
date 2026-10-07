@@ -32,7 +32,9 @@ public class Display.Monitor : GLib.Object {
 
     public string display_name { get; set; }
     public bool is_builtin { get; set; }
+    public bool is_for_lease { get; set; }
     public Gee.LinkedList<Display.MonitorMode> modes { get; construct; }
+    public GLib.HashTable<string, GLib.Variant> configuration_properties { get; construct; }
 
     public Display.MonitorMode current_mode {
         owned get {
@@ -71,6 +73,20 @@ public class Display.Monitor : GLib.Object {
 
     construct {
         modes = new Gee.LinkedList<Display.MonitorMode> ();
+        configuration_properties = new GLib.HashTable<string, GLib.Variant> (str_hash, str_equal);
+    }
+
+    public Display.MonitorMode? get_adaptive_sync_mode (Display.MonitorMode current, bool enabled) {
+        foreach (var mode in modes) {
+            if (mode.is_variable == enabled &&
+                mode.width == current.width && mode.height == current.height &&
+                mode.frequency == current.frequency &&
+                mode.is_interlaced == current.is_interlaced) {
+                return mode;
+            }
+        }
+
+        return null;
     }
 
     public Display.MonitorMode? get_mode_by_id (string id) {
