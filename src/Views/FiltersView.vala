@@ -160,7 +160,13 @@ public class Display.FiltersView : Gtk.Box {
             child = box
         };
 
-        append (clamp);
+        var scrolled = new Gtk.ScrolledWindow () {
+            child = clamp,
+            hscrollbar_policy = NEVER,
+            vexpand = true
+        };
+
+        append (scrolled);
         margin_start = 12;
         margin_end = 12;
         margin_bottom = 12;
