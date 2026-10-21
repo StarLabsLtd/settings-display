@@ -188,18 +188,26 @@ public class Display.VirtualMonitor : GLib.Object {
     }
 
     public Display.MonitorMode? get_mode_for_resolution (int width, int height) {
+        Display.MonitorMode? fallback = null;
         foreach (var mode in get_available_modes ()) {
             if (mode.width == width && mode.height == height) {
-                return mode;
+                if (mode.is_variable == monitors[0].current_mode.is_variable) {
+                    return mode;
+                }
+
+                if (fallback == null) {
+                    fallback = mode;
+                }
             }
         }
 
-        return null;
+        return fallback;
     }
 
     public void set_current_mode (Display.MonitorMode current_mode) {
         if (is_mirror) {
             monitors.foreach ((_monitor) => {
+                bool is_variable = _monitor.current_mode.is_variable;
                 bool mode_found = false;
                 foreach (var mode in _monitor.modes) {
                     if (mode_found) {
@@ -207,7 +215,8 @@ public class Display.VirtualMonitor : GLib.Object {
                         continue;
                     }
 
-                    if (mode.width == current_mode.width && mode.height == current_mode.height) {
+                    if (mode.width == current_mode.width && mode.height == current_mode.height &&
+                        mode.is_variable == is_variable) {
                         mode_found = true;
                         mode.is_current = true;
                     } else {
@@ -239,13 +248,13 @@ public class Display.VirtualMonitor : GLib.Object {
         return val.to_string ();
     }
 
-    /**
-     * Apply scaling, to avoid gaps between virtual monitors in the configuration
-     * @param dimension The monitor dimension to scale (width or height) by the current `scale` factor
-     * @return the dimension scaled then rounded up and converted back to int
-     */
+    // Geometry must use the same layout units as ApplyMonitorsConfig.
     private int apply_current_scale (int dimension) {
-        return (int) Math.ceil (dimension / scale);
+        if (MonitorManager.get_default ().fractional_scale_enabled) {
+            return (int) Math.ceil (dimension / scale);
+        }
+
+        return dimension;
     }
 
     /**
