@@ -39,6 +39,8 @@ public class Display.MonitorMode : GLib.Object {
     public double preferred_scale { get; set; }
     public bool is_preferred { get; set; }
     public bool is_current { get; set; }
+    public bool is_variable { get; set; }
+    public bool is_interlaced { get; set; }
 
     public double[] supported_scales;
 

@@ -40,6 +40,7 @@ public class Display.DisplaysOverlay : Gtk.Box {
 
     private unowned Display.MonitorManager monitor_manager;
     private GalaDBus gala_dbus = null;
+    private bool labels_requested = false;
     public int active_displays { get; set; default = 0; }
     /// Number of inactive displays. This should never be decreased. Always go up from 0
     private int inactive_displays = 0;
@@ -106,6 +107,12 @@ public class Display.DisplaysOverlay : Gtk.Box {
                 critical (e.message);
             }
         });
+
+        map.connect (() => {
+            labels_requested = true;
+            update_windows ();
+        });
+        unmap.connect (hide_windows);
 
         overlay.get_child_position.connect (get_child_position);
     }
@@ -210,13 +217,22 @@ public class Display.DisplaysOverlay : Gtk.Box {
             add_output (virtual_monitor);
         }
 
-        show_windows ();
         change_active_displays_sensitivity ();
         calculate_ratio ();
         scanning = false;
+        update_windows ();
     }
 
-    public void show_windows () requires (gala_dbus != null) {
+    public void show_windows () {
+        labels_requested = true;
+        update_windows ();
+    }
+
+    private void update_windows () {
+        if (!labels_requested || !get_mapped () || gala_dbus == null) {
+            return;
+        }
+
         if (monitor_manager.is_mirrored) {
             return;
         }
@@ -243,7 +259,12 @@ public class Display.DisplaysOverlay : Gtk.Box {
         }
     }
 
-    public void hide_windows () requires (gala_dbus != null) {
+    public void hide_windows () {
+        labels_requested = false;
+        if (gala_dbus == null) {
+            return;
+        }
+
         try {
             gala_dbus.hide_monitor_labels ();
         } catch (Error e) {

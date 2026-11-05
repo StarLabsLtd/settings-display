@@ -48,6 +48,8 @@ public class Display.DisplayWidget : Gtk.Box {
 
     private Gtk.ComboBox refresh_combobox;
     private Gtk.ListStore refresh_list_store;
+    private bool updating_refresh_rates;
+    private Gee.HashMap<Display.Monitor, Gtk.CheckButton> adaptive_sync_buttons;
 
     private Gtk.DropDown scale_drop_down;
 
@@ -244,6 +246,49 @@ public class Display.DisplayWidget : Gtk.Box {
         popover_box.append (refresh_label);
         popover_box.append (refresh_combobox);
 
+        adaptive_sync_buttons = new Gee.HashMap<Display.Monitor, Gtk.CheckButton> ();
+        foreach (var monitor in virtual_monitor.monitors) {
+            bool supports_adaptive_sync = false;
+            foreach (var mode in monitor.modes) {
+                if (mode.is_variable) {
+                    supports_adaptive_sync = true;
+                    break;
+                }
+            }
+
+            if (!supports_adaptive_sync) {
+                continue;
+            }
+
+            var label = virtual_monitor.is_mirror ?
+                _("Adaptive Sync: %s").printf (monitor.display_name) : _("Adaptive Sync");
+            var button = new Gtk.CheckButton.with_label (label) {
+                margin_start = 12,
+                margin_end = 12,
+                margin_top = 6
+            };
+            adaptive_sync_buttons[monitor] = button;
+            popover_box.append (button);
+            button.toggled.connect (() => {
+                if (button.active == monitor.current_mode.is_variable) {
+                    return;
+                }
+
+                var mode = monitor.get_adaptive_sync_mode (monitor.current_mode, button.active);
+                if (mode == null || !(virtual_monitor.scale in mode.supported_scales)) {
+                    return;
+                }
+
+                monitor.current_mode.is_current = false;
+                mode.is_current = true;
+                populate_refresh_rates ();
+                update_adaptive_sync_buttons ();
+                configuration_changed ();
+            });
+        }
+
+        update_adaptive_sync_buttons ();
+
         if (!MonitorManager.get_default ().global_scale_required) {
             popover_box.append (scale_label);
             popover_box.append (scale_drop_down);
@@ -292,6 +337,7 @@ public class Display.DisplayWidget : Gtk.Box {
         use_switch.notify["active"].connect (() => {
             if (resolution_combobox.active == -1) resolution_combobox.set_active (0);
             if (refresh_combobox.active == -1) refresh_combobox.set_active (0);
+            update_adaptive_sync_buttons ();
 
             if (use_switch.active) {
                 remove_css_class ("disabled");
@@ -335,6 +381,7 @@ public class Display.DisplayWidget : Gtk.Box {
 
             virtual_monitor.set_current_mode (new_mode);
             populate_refresh_rates ();
+            update_adaptive_sync_buttons ();
             configuration_changed ();
             check_position ();
         });
@@ -350,6 +397,10 @@ public class Display.DisplayWidget : Gtk.Box {
         });
 
         refresh_combobox.changed.connect (() => {
+            if (updating_refresh_rates) {
+                return;
+            }
+
             // Prevent breaking autohide by closing popover
             popover.popdown ();
 
@@ -359,6 +410,7 @@ public class Display.DisplayWidget : Gtk.Box {
                 refresh_list_store.get_value (iter, RefreshColumns.VALUE, out val);
                 Display.MonitorMode new_mode = (Display.MonitorMode) val;
                 virtual_monitor.set_current_mode (new_mode);
+                update_adaptive_sync_buttons ();
                 configuration_changed ();
                 check_position ();
             }
@@ -369,6 +421,7 @@ public class Display.DisplayWidget : Gtk.Box {
             popover.popdown ();
 
             virtual_monitor.get_current_mode_size (out real_height, out real_width);
+            update_adaptive_sync_buttons ();
             configuration_changed ();
             check_position ();
         });
@@ -382,6 +435,7 @@ public class Display.DisplayWidget : Gtk.Box {
     }
 
     private void populate_refresh_rates () {
+        updating_refresh_rates = true;
         refresh_list_store.clear ();
 
         Gtk.TreeIter iter;
@@ -394,38 +448,41 @@ public class Display.DisplayWidget : Gtk.Box {
                     ResolutionColumns.HEIGHT, out active_height
                 );
             } else {
+                updating_refresh_rates = false;
                 return;
             }
 
-            double[] frequencies = {};
             bool refresh_set = false;
             foreach (var mode in virtual_monitor.get_available_modes ()) {
-                if (mode.width != active_width || mode.height != active_height) {
-                    continue;
-                }
-
-                if (mode.frequency in frequencies) {
+                if (mode.width != active_width || mode.height != active_height ||
+                    mode.is_variable != virtual_monitor.monitors[0].current_mode.is_variable) {
                     continue;
                 }
 
                 bool freq_already_added = false;
-                foreach (var freq in frequencies) {
-                    if ((mode.frequency - freq).abs () < 1) {
+                refresh_list_store.@foreach ((model, path, existing_iter) => {
+                    Display.MonitorMode existing_mode;
+                    model.get (existing_iter, RefreshColumns.VALUE, out existing_mode);
+                    if ((mode.frequency - existing_mode.frequency).abs () < 1) {
                         freq_already_added = true;
-                        break;
+                        iter = existing_iter;
+                        return true;
                     }
-                }
 
-                if (freq_already_added) {
+                    return false;
+                });
+
+                if (freq_already_added && !mode.is_current) {
                     continue;
                 }
 
-                frequencies += mode.frequency;
+                if (!freq_already_added) {
+                    refresh_list_store.append (out iter);
+                    added++;
+                }
 
                 var freq_name = _("%g Hz").printf (Math.roundf ((float)mode.frequency));
-                refresh_list_store.append (out iter);
-                refresh_list_store.set (iter, ResolutionColumns.NAME, freq_name, RefreshColumns.VALUE, mode);
-                added++;
+                refresh_list_store.set (iter, RefreshColumns.NAME, freq_name, RefreshColumns.VALUE, mode);
                 if (mode.is_current) {
                     refresh_combobox.set_active_iter (iter);
                     refresh_set = true;
@@ -438,6 +495,18 @@ public class Display.DisplayWidget : Gtk.Box {
         }
 
         refresh_combobox.sensitive = added > 1;
+        updating_refresh_rates = false;
+    }
+
+    private void update_adaptive_sync_buttons () {
+        foreach (var entry in adaptive_sync_buttons.entries) {
+            var monitor = entry.key;
+            var button = entry.value;
+            button.active = monitor.current_mode.is_variable;
+            var mode = monitor.get_adaptive_sync_mode (monitor.current_mode, !button.active);
+            button.sensitive = virtual_monitor.is_active && mode != null &&
+                virtual_monitor.scale in mode.supported_scales;
+        }
     }
 
     private void update_frame_rotation_and_label () {

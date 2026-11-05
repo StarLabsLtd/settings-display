@@ -160,7 +160,13 @@ public class Display.FiltersView : Gtk.Box {
             child = box
         };
 
-        append (clamp);
+        var scrolled = new Gtk.ScrolledWindow () {
+            child = clamp,
+            hscrollbar_policy = NEVER,
+            vexpand = true
+        };
+
+        append (scrolled);
         margin_start = 12;
         margin_end = 12;
         margin_bottom = 12;
@@ -182,7 +188,7 @@ public class Display.FiltersView : Gtk.Box {
                     return new Variant ("s", "none");
                 }
 
-                return new Variant.maybe (VariantType.STRING, null);
+                return (Variant) null;
             },
             null, null
         );
@@ -198,7 +204,7 @@ public class Display.FiltersView : Gtk.Box {
                     return new Variant ("s", "protanopia");
                 }
 
-                return new Variant.maybe (VariantType.STRING, null);
+                return (Variant) null;
             },
             null, null
         );
@@ -214,7 +220,7 @@ public class Display.FiltersView : Gtk.Box {
                     return new Variant ("s", "protanopia-high-contrast");
                 }
 
-                return new Variant.maybe (VariantType.STRING, null);
+                return (Variant) null;
             },
             null, null
         );
@@ -230,7 +236,7 @@ public class Display.FiltersView : Gtk.Box {
                     return new Variant ("s", "deuteranopia");
                 }
 
-                return new Variant.maybe (VariantType.STRING, null);
+                return (Variant) null;
             },
             null, null
         );
@@ -246,7 +252,7 @@ public class Display.FiltersView : Gtk.Box {
                     return new Variant ("s", "deuteranopia-high-contrast");
                 }
 
-                return new Variant.maybe (VariantType.STRING, null);
+                return (Variant) null;
             },
             null, null
         );
@@ -262,7 +268,7 @@ public class Display.FiltersView : Gtk.Box {
                     return new Variant ("s", "tritanopia");
                 }
 
-                return new Variant.maybe (VariantType.STRING, null);
+                return (Variant) null;
             },
             null, null
         );
@@ -278,7 +284,7 @@ public class Display.FiltersView : Gtk.Box {
                     return new Variant ("s", "none");
                 }
 
-                return new Variant.maybe (VariantType.STRING, null);
+                return (Variant) null;
             },
             null, null
         );
