@@ -188,7 +188,7 @@ public class Display.FiltersView : Gtk.Box {
                     return new Variant ("s", "none");
                 }
 
-                return null;
+                return new Variant.maybe (VariantType.STRING, null);
             },
             null, null
         );
@@ -204,7 +204,7 @@ public class Display.FiltersView : Gtk.Box {
                     return new Variant ("s", "protanopia");
                 }
 
-                return null;
+                return new Variant.maybe (VariantType.STRING, null);
             },
             null, null
         );
@@ -220,7 +220,7 @@ public class Display.FiltersView : Gtk.Box {
                     return new Variant ("s", "protanopia-high-contrast");
                 }
 
-                return null;
+                return new Variant.maybe (VariantType.STRING, null);
             },
             null, null
         );
@@ -236,7 +236,7 @@ public class Display.FiltersView : Gtk.Box {
                     return new Variant ("s", "deuteranopia");
                 }
 
-                return null;
+                return new Variant.maybe (VariantType.STRING, null);
             },
             null, null
         );
@@ -252,7 +252,7 @@ public class Display.FiltersView : Gtk.Box {
                     return new Variant ("s", "deuteranopia-high-contrast");
                 }
 
-                return null;
+                return new Variant.maybe (VariantType.STRING, null);
             },
             null, null
         );
@@ -268,7 +268,7 @@ public class Display.FiltersView : Gtk.Box {
                     return new Variant ("s", "tritanopia");
                 }
 
-                return null;
+                return new Variant.maybe (VariantType.STRING, null);
             },
             null, null
         );
@@ -284,7 +284,7 @@ public class Display.FiltersView : Gtk.Box {
                     return new Variant ("s", "none");
                 }
 
-                return null;
+                return new Variant.maybe (VariantType.STRING, null);
             },
             null, null
         );
