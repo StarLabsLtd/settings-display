@@ -286,12 +286,12 @@ public class Display.DisplayWidget : Gtk.Box {
 
         use_switch.bind_property ("active", resolution_combobox, "sensitive");
         use_switch.bind_property ("active", rotation_drop_down, "sensitive");
-        use_switch.bind_property ("active", refresh_combobox, "sensitive");
         use_switch.bind_property ("active", scale_drop_down, "sensitive");
 
         use_switch.notify["active"].connect (() => {
             if (resolution_combobox.active == -1) resolution_combobox.set_active (0);
             if (refresh_combobox.active == -1) refresh_combobox.set_active (0);
+            refresh_combobox.sensitive = use_switch.active && refresh_list_store.iter_n_children (null) > 1;
 
             if (use_switch.active) {
                 remove_css_class ("disabled");
@@ -437,7 +437,7 @@ public class Display.DisplayWidget : Gtk.Box {
             }
         }
 
-        refresh_combobox.sensitive = added > 1;
+        refresh_combobox.sensitive = use_switch.active && added > 1;
     }
 
     private void update_frame_rotation_and_label () {
